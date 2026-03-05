@@ -47,17 +47,43 @@ const SalaryReport = () => {
 
             // Only include employees with logged hours or if specifically selected
             if (payroll.totalPay > 0 || totalMiles > 0 || totalCellPhone > 0 || selectedEmployeeId === emp.id) {
-                const effectiveRate = payroll.regularHours > 0
-                    ? payroll.regularPay / payroll.regularHours
-                    : (emp.hourlyRate || 20);
-
-                results.push({
-                    employee: emp,
-                    ...payroll,
-                    effectiveRate,
-                    totalMiles,
-                    totalCellPhone
-                });
+                // If there's a breakdown, push each breakdown item as a separate result row
+                if (payroll.breakdown && payroll.breakdown.length > 0) {
+                    payroll.breakdown.forEach(item => {
+                        results.push({
+                            employee: emp,
+                            mode: item.mode,
+                            hourlyRate: item.rate,
+                            regularHours: item.regularHours,
+                            regularPay: item.regularPay,
+                            dailyOTPay: item.dailyOTPay,
+                            weeklyOTPay: item.weeklyOTPay,
+                            totalOTHours: (item.dailyOTHours || 0) + (item.weeklyOTHours || 0),
+                            totalOTPay: (item.dailyOTPay || 0) + (item.weeklyOTPay || 0),
+                            totalPay: item.totalPay,
+                            miles: item.miles,
+                            cellPhone: item.cellPhone,
+                            payPeriod: selectedWeek
+                        });
+                    });
+                } else {
+                    // Fallback for employees with no entries but specifically selected
+                    results.push({
+                        employee: emp,
+                        mode: '-',
+                        hourlyRate: emp.hourlyRate || 20,
+                        regularHours: 0,
+                        regularPay: 0,
+                        dailyOTPay: 0,
+                        weeklyOTPay: 0,
+                        totalOTHours: 0,
+                        totalOTPay: 0,
+                        totalPay: 0,
+                        miles: 0,
+                        cellPhone: 0,
+                        payPeriod: selectedWeek
+                    });
+                }
             }
         });
 
@@ -67,18 +93,20 @@ const SalaryReport = () => {
     const handleExportCSV = () => {
         if (reportData.length === 0) return;
 
-        const headers = ['Employee ID', 'Name', 'Pay Rate', 'Regular Hours', 'Regular Pay', 'Daily OT Pay', 'Weekly OT Pay', 'Total Pay', 'Miles Traveled', 'Cell Phone'];
+        const headers = ['Employee_Name', 'Employee_ID', 'Mode', 'payperiod', 'payrate', 'regular hours', 'regular pay', 'Total OT Hours', 'Total ot Pay', 'total pay', 'miles travel', 'cell phone'];
         const rows = reportData.map(r => [
-            r.employee.id,
             r.employee.name,
-            r.effectiveRate.toFixed(2),
+            r.employee.id,
+            r.mode,
+            r.payPeriod,
+            r.hourlyRate.toFixed(2),
             r.regularHours.toFixed(2),
             r.regularPay.toFixed(2),
-            r.dailyOTPay.toFixed(2),
-            r.weeklyOTPay.toFixed(2),
+            r.totalOTHours.toFixed(2),
+            r.totalOTPay.toFixed(2),
             r.totalPay.toFixed(2),
-            (r.totalMiles || 0).toFixed(1),
-            (r.totalCellPhone || 0).toFixed(2)
+            (r.miles || 0).toFixed(1),
+            (r.cellPhone || 0).toFixed(2)
         ]);
 
         const csvContent = [
@@ -97,16 +125,18 @@ const SalaryReport = () => {
         if (reportData.length === 0) return;
 
         const worksheetData = reportData.map(r => ({
-            'Employee ID': r.employee.id,
-            'Name': r.employee.name,
-            'Pay Rate ($)': r.effectiveRate,
-            'Regular Hours': r.regularHours,
-            'Regular Pay ($)': r.regularPay,
-            'Daily OT Pay ($)': r.dailyOTPay,
-            'Weekly OT Pay ($)': r.weeklyOTPay,
-            'Total Pay ($)': r.totalPay,
-            'Travel Miles': r.totalMiles || 0,
-            'Cell Phone ($)': r.totalCellPhone || 0
+            'Employee_Name': r.employee.name,
+            'Employee_ID': r.employee.id,
+            'Mode': r.mode,
+            'payperiod': r.payPeriod,
+            'payrate': r.hourlyRate,
+            'regular hours': r.regularHours,
+            'regular pay': r.regularPay,
+            'Total OT Hours': r.totalOTHours,
+            'Total ot Pay': r.totalOTPay,
+            'total pay': r.totalPay,
+            'miles travel': r.miles || 0,
+            'cell phone': r.cellPhone || 0
         }));
 
         const worksheet = XLSX.utils.json_to_sheet(worksheetData);
@@ -171,28 +201,30 @@ const SalaryReport = () => {
                     <table className="data-table">
                         <thead>
                             <tr>
-                                <th>Employee Name</th>
-                                <th>Pay Rate</th>
+                                <th>Name</th>
+                                <th>Mode</th>
+                                <th>Rate</th>
                                 <th>Regular Hrs</th>
-                                <th>Regular Pay ($)</th>
-                                <th>Daily OT ($)</th>
-                                <th>Weekly OT ($)</th>
+                                <th>Regular Pay</th>
+                                <th>Total OT Hrs</th>
+                                <th>Total OT Pay</th>
                                 <th>Miles</th>
-                                <th>Cell ($)</th>
-                                <th className="text-right">Total Pay ($)</th>
+                                <th>Cell</th>
+                                <th className="text-right">Total Pay</th>
                             </tr>
                         </thead>
                         <tbody>
                             {reportData.length > 0 ? reportData.map(row => (
-                                <tr key={row.employee.id}>
+                                <tr key={`${row.employee.id}-${row.mode}-${row.hourlyRate}`}>
                                     <td className="font-medium">{row.employee.name}</td>
-                                    <td>${row.effectiveRate.toFixed(2)}</td>
+                                    <td>{row.mode}</td>
+                                    <td>${row.hourlyRate.toFixed(2)}</td>
                                     <td>{row.regularHours.toFixed(1)}</td>
                                     <td>${row.regularPay.toFixed(2)}</td>
-                                    <td className="text-muted">${row.dailyOTPay.toFixed(2)}</td>
-                                    <td className="text-muted">${row.weeklyOTPay.toFixed(2)}</td>
-                                    <td className="text-muted">{row.totalMiles?.toFixed(1) || '0.0'}</td>
-                                    <td className="text-muted">${row.totalCellPhone?.toFixed(2) || '0.00'}</td>
+                                    <td className="text-muted">{row.totalOTHours.toFixed(1)}</td>
+                                    <td className="text-muted">${row.totalOTPay.toFixed(2)}</td>
+                                    <td className="text-muted">{row.miles?.toFixed(1) || '0.0'}</td>
+                                    <td className="text-muted">${row.cellPhone?.toFixed(2) || '0.00'}</td>
                                     <td className="text-right font-medium text-primary">${row.totalPay.toFixed(2)}</td>
                                 </tr>
                             )) : (
@@ -204,12 +236,12 @@ const SalaryReport = () => {
                         {reportData.length > 0 && (
                             <tfoot>
                                 <tr style={{ background: 'var(--secondary)', fontWeight: 'bold' }}>
-                                    <td colSpan="3" className="text-right">Totals:</td>
+                                    <td colSpan="4" className="text-right">Totals:</td>
                                     <td>${reportData.reduce((sum, r) => sum + r.regularPay, 0).toFixed(2)}</td>
-                                    <td>${reportData.reduce((sum, r) => sum + r.dailyOTPay, 0).toFixed(2)}</td>
-                                    <td>${reportData.reduce((sum, r) => sum + r.weeklyOTPay, 0).toFixed(2)}</td>
-                                    <td>{reportData.reduce((sum, r) => sum + (r.totalMiles || 0), 0).toFixed(1)}</td>
-                                    <td>${reportData.reduce((sum, r) => sum + (r.totalCellPhone || 0), 0).toFixed(2)}</td>
+                                    <td>{reportData.reduce((sum, r) => sum + r.totalOTHours, 0).toFixed(1)}</td>
+                                    <td>${reportData.reduce((sum, r) => sum + r.totalOTPay, 0).toFixed(2)}</td>
+                                    <td>{reportData.reduce((sum, r) => sum + (r.miles || 0), 0).toFixed(1)}</td>
+                                    <td>${reportData.reduce((sum, r) => sum + (r.cellPhone || 0), 0).toFixed(2)}</td>
                                     <td className="text-right text-primary">${reportData.reduce((sum, r) => sum + r.totalPay, 0).toFixed(2)}</td>
                                 </tr>
                             </tfoot>

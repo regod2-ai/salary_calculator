@@ -31,89 +31,139 @@ export const getHourlyRate = (mode, clients, baseRate = 20) => {
 export const calculateWeeklyPayroll = (entries, baseRate = 20) => {
     let totalRegularHours = 0;
     let totalDailyOTPay = 0;
-    let regularPayAcc = 0; // Accumulated regular pay before weekly OT is considered
-    let weeklyHoursRemaining = 50; // Weekly cap (all modes)
+    let totalDailyOTHours = 0;
+    let totalWeeklyOTHours = 0;
+    let totalWeeklyOTPay = 0;
+    let totalPay = 0;
 
-    // Group entries by date
+    let weeklyHoursRemainingForRegular = 40;
+    let weeklyHoursRemainingTotal = 50;
+
+    // Track breakdown by (mode + rate)
+    const breakdownMap = {};
+
+    // Sort entries by date to ensure sequential attribution
+    const sortedEntries = [...entries].sort((a, b) => a.date.localeCompare(b.date));
+
+    // Group entries by date for daily OT calculation
     const entriesByDate = {};
-    entries.forEach(entry => {
+    sortedEntries.forEach(entry => {
         if (!entriesByDate[entry.date]) entriesByDate[entry.date] = [];
         entriesByDate[entry.date].push(entry);
     });
 
-    // Calculate daily totals
+    // Process dates in order
     Object.keys(entriesByDate).sort().forEach(date => {
         const dayEntries = entriesByDate[date];
         let dailyHoursAcc = 0;
-        const dailyLimit = 12; // Daily cap for non-DD modes
+        const dailyLimit = 12; // Daily cap for non-DD/sick modes
 
         dayEntries.forEach(entry => {
             const mode = entry.mode;
             const rate = entry.hourlyRate || getHourlyRate(mode, entry.clients, baseRate);
+            const key = `${mode}_${rate}`;
 
-            let effectiveHours = entry.hours;
+            if (!breakdownMap[key]) {
+                breakdownMap[key] = {
+                    mode,
+                    rate,
+                    regularHours: 0,
+                    regularPay: 0,
+                    dailyOTHours: 0,
+                    dailyOTPay: 0,
+                    weeklyOTHours: 0,
+                    weeklyOTPay: 0,
+                    totalPay: 0,
+                    miles: 0,
+                    cellPhone: 0
+                };
+            }
 
-            // Apply Daily Cap (except DD and sick)
+            let entryHours = entry.hours;
+
+            // 1. Apply Daily Cap (except DD and sick)
             if (mode !== 'DD' && mode !== 'sick') {
                 const availableInDay = Math.max(0, dailyLimit - dailyHoursAcc);
-                effectiveHours = Math.min(effectiveHours, availableInDay);
+                entryHours = Math.min(entryHours, availableInDay);
             }
 
-            // Apply Weekly Cap (All modes)
-            effectiveHours = Math.min(effectiveHours, weeklyHoursRemaining);
+            // 2. Apply Weekly Total Cap (50 hours)
+            const availableInWeek = Math.max(0, weeklyHoursRemainingTotal);
+            entryHours = Math.min(entryHours, availableInWeek);
 
-            if (effectiveHours <= 0) return;
+            if (entryHours <= 0) return;
 
-            weeklyHoursRemaining -= effectiveHours;
+            weeklyHoursRemainingTotal -= entryHours;
+            breakdownMap[key].miles += (entry.miles || 0);
+            breakdownMap[key].cellPhone += (entry.cellPhone || 0);
 
-            if (mode === 'DD' || mode === 'sick') {
-                // Mode 1: No daily OT
-                totalRegularHours += effectiveHours;
-                regularPayAcc += effectiveHours * rate;
-            } else {
-                // Mode 2, 3, 4: Daily OT applies after 9 hours
+            // 3. Calculate Daily OT (if applicable)
+            let dailyOTPart = 0;
+            let nonDailyOTPart = entryHours;
+
+            if (mode !== 'DD' && mode !== 'sick') {
                 const hoursBeforeInDay = dailyHoursAcc;
-                const hoursAfterInDay = dailyHoursAcc + effectiveHours;
+                const hoursAfterInDay = dailyHoursAcc + entryHours;
 
                 if (hoursBeforeInDay >= 9) {
-                    // Entire effective entry is daily OT
-                    totalDailyOTPay += effectiveHours * (rate * 1.5);
+                    dailyOTPart = entryHours;
+                    nonDailyOTPart = 0;
                 } else if (hoursAfterInDay > 9) {
-                    // Splits across the 9-hour boundary
-                    const regularPart = 9 - hoursBeforeInDay;
-                    const otPart = effectiveHours - regularPart;
-
-                    totalRegularHours += regularPart;
-                    regularPayAcc += regularPart * rate;
-                    totalDailyOTPay += otPart * (rate * 1.5);
-                } else {
-                    // Entire effective entry is regular
-                    totalRegularHours += effectiveHours;
-                    regularPayAcc += effectiveHours * rate;
+                    dailyOTPart = hoursAfterInDay - 9;
+                    nonDailyOTPart = 9 - hoursBeforeInDay;
                 }
             }
-            dailyHoursAcc += effectiveHours;
+
+            // Attribute Daily OT
+            if (dailyOTPart > 0) {
+                const otPay = dailyOTPart * (rate * 1.5);
+                totalDailyOTPay += otPay;
+                totalDailyOTHours += dailyOTPart;
+                breakdownMap[key].dailyOTPay += otPay;
+                breakdownMap[key].dailyOTHours += dailyOTPart;
+            }
+
+            // 4. Attribute Remaining (Non-Daily OT) hours to Regular vs Weekly OT
+            if (nonDailyOTPart > 0) {
+                const regularPart = Math.min(nonDailyOTPart, weeklyHoursRemainingForRegular);
+                const weeklyOTPart = nonDailyOTPart - regularPart;
+
+                if (regularPart > 0) {
+                    totalRegularHours += regularPart;
+                    weeklyHoursRemainingForRegular -= regularPart;
+                    breakdownMap[key].regularHours += regularPart;
+                    breakdownMap[key].regularPay += regularPart * rate;
+                }
+
+                if (weeklyOTPart > 0) {
+                    const wotPay = weeklyOTPart * (rate * 1.5);
+                    totalWeeklyOTHours += weeklyOTPart;
+                    totalWeeklyOTPay += wotPay;
+                    breakdownMap[key].weeklyOTHours += weeklyOTPart;
+                    breakdownMap[key].weeklyOTPay += wotPay;
+                }
+            }
+
+            dailyHoursAcc += entryHours;
         });
     });
 
-    // Calculate Weekly OT
-    let weeklyOTPay = 0;
-    let regularPayFinal = regularPayAcc;
+    // Finalize totals for each breakdown item
+    Object.values(breakdownMap).forEach(item => {
+        item.totalPay = item.regularPay + item.dailyOTPay + item.weeklyOTPay;
+    });
 
-    if (totalRegularHours > 40) {
-        const weeklyOTHours = totalRegularHours - 40;
-        const averageRegularRate = regularPayAcc / totalRegularHours;
-
-        regularPayFinal = 40 * averageRegularRate;
-        weeklyOTPay = weeklyOTHours * (averageRegularRate * 1.5);
-    }
+    const finalRegularPay = Object.values(breakdownMap).reduce((sum, item) => sum + item.regularPay, 0);
 
     return {
-        regularHours: Math.min(totalRegularHours, 40),
-        regularPay: regularPayFinal,
+        regularHours: totalRegularHours,
+        regularPay: finalRegularPay,
         dailyOTPay: totalDailyOTPay,
-        weeklyOTPay: weeklyOTPay,
-        totalPay: regularPayFinal + totalDailyOTPay + weeklyOTPay
+        dailyOTHours: totalDailyOTHours,
+        weeklyOTPay: totalWeeklyOTPay,
+        weeklyOTHours: totalWeeklyOTHours,
+        totalPay: finalRegularPay + totalDailyOTPay + totalWeeklyOTPay,
+        breakdown: Object.values(breakdownMap)
     };
 };
 
