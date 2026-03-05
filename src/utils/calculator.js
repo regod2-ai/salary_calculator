@@ -1,17 +1,19 @@
 // src/utils/calculator.js
 
 /**
- * Calculate the hourly rate based on mode and client count
+ * Calculate the hourly rate based on mode, client count, and base rate
  */
-export const getHourlyRate = (mode, clients) => {
+export const getHourlyRate = (mode, clients, baseRate = 20) => {
     if (mode === 'DD') {
-        // 1 client = 20, extra clients add $1
-        return 20 + Math.max(0, clients - 1);
-    } else if (mode === 'CARI/FFH' || mode === 'AAA') {
-        if (clients <= 3) return 20;
-        if (clients <= 6) return 21;
+        if (clients <= 1) return baseRate;
+        if (clients === 2) return baseRate + 1;
+        // 3 or more clients
+        return baseRate + 1.5;
+    } else if (mode === 'CARI/FFH' || mode === 'AAA' || mode === 'KSSP') {
+        if (clients <= 3) return baseRate;
+        if (clients <= 6) return baseRate + 1;
         // > 6 clients
-        return 21 + (clients - 6) * 0.75;
+        return baseRate + 1 + (clients - 6) * 0.25;
     }
     return 0;
 };
@@ -21,14 +23,16 @@ export const getHourlyRate = (mode, clients) => {
  * Entries must be within the same Sun-Sat week boundary.
  * 
  * @param {Array} entries - Array of time entry objects for a single employee in one week.
+ * @param {number} baseRate - The employee's custom base hourly rate.
  * @returns {Object} - Breakdown of regular pay, daily OT, weekly OT, and total.
  */
-export const calculateWeeklyPayroll = (entries) => {
+export const calculateWeeklyPayroll = (entries, baseRate = 20) => {
     let totalRegularHours = 0;
     let totalDailyOTPay = 0;
     let regularPayAcc = 0; // Accumulated regular pay before weekly OT is considered
+    let weeklyHoursRemaining = 50; // Weekly cap (all modes)
 
-    // Group entries by date to calculate daily overtime (only applies to Mode 2/3)
+    // Group entries by date
     const entriesByDate = {};
     entries.forEach(entry => {
         if (!entriesByDate[entry.date]) entriesByDate[entry.date] = [];
@@ -36,52 +40,61 @@ export const calculateWeeklyPayroll = (entries) => {
     });
 
     // Calculate daily totals
-    Object.keys(entriesByDate).forEach(date => {
+    Object.keys(entriesByDate).sort().forEach(date => {
         const dayEntries = entriesByDate[date];
-        // Sort entries or assume they are chronological. We just need total hours per day.
-        // However, rate might differ per entry if clients/mode differ within same day.
-        // For simplicity, we process entries sequentially to allocate to the 8-hour bucket.
-
         let dailyHoursAcc = 0;
+        const dailyLimit = 12; // Daily cap for non-DD modes
 
         dayEntries.forEach(entry => {
             const mode = entry.mode;
-            const rate = getHourlyRate(mode, entry.clients);
+            const rate = entry.hourlyRate || getHourlyRate(mode, entry.clients, baseRate);
+
+            let effectiveHours = entry.hours;
+
+            // Apply Daily Cap (except DD)
+            if (mode !== 'DD') {
+                const availableInDay = Math.max(0, dailyLimit - dailyHoursAcc);
+                effectiveHours = Math.min(effectiveHours, availableInDay);
+            }
+
+            // Apply Weekly Cap (All modes)
+            effectiveHours = Math.min(effectiveHours, weeklyHoursRemaining);
+
+            if (effectiveHours <= 0) return;
+
+            weeklyHoursRemaining -= effectiveHours;
 
             if (mode === 'DD') {
-                // Mode 1: No daily OT, all goes to regular hours for weekly OT consideration
-                totalRegularHours += entry.hours;
-                regularPayAcc += entry.hours * rate;
+                // Mode 1: No daily OT
+                totalRegularHours += effectiveHours;
+                regularPayAcc += effectiveHours * rate;
             } else {
-                // Mode 2 & 3: Daily OT applies after 8 hours
-                const hoursBeforeThisEntry = dailyHoursAcc;
-                const hoursAfterThisEntry = dailyHoursAcc + entry.hours;
+                // Mode 2, 3, 4: Daily OT applies after 9 hours
+                const hoursBeforeInDay = dailyHoursAcc;
+                const hoursAfterInDay = dailyHoursAcc + effectiveHours;
 
-                if (hoursBeforeThisEntry >= 8) {
-                    // Entire entry is daily OT
-                    totalDailyOTPay += entry.hours * (rate * 1.5);
-                } else if (hoursAfterThisEntry > 8) {
-                    // Splits across the 8-hour boundary
-                    const regularPart = 8 - hoursBeforeThisEntry;
-                    const otPart = entry.hours - regularPart;
+                if (hoursBeforeInDay >= 9) {
+                    // Entire effective entry is daily OT
+                    totalDailyOTPay += effectiveHours * (rate * 1.5);
+                } else if (hoursAfterInDay > 9) {
+                    // Splits across the 9-hour boundary
+                    const regularPart = 9 - hoursBeforeInDay;
+                    const otPart = effectiveHours - regularPart;
 
                     totalRegularHours += regularPart;
                     regularPayAcc += regularPart * rate;
                     totalDailyOTPay += otPart * (rate * 1.5);
                 } else {
-                    // Entire entry is regular
-                    totalRegularHours += entry.hours;
-                    regularPayAcc += entry.hours * rate;
+                    // Entire effective entry is regular
+                    totalRegularHours += effectiveHours;
+                    regularPayAcc += effectiveHours * rate;
                 }
-
-                dailyHoursAcc += entry.hours;
             }
+            dailyHoursAcc += effectiveHours;
         });
     });
 
     // Calculate Weekly OT
-    // Average regular rate might be needed if multiple rates exist in the 40 regular hours.
-    // Standard FLSA approach: Weighted average regular rate = Total Regular Pay / Total Regular Hours
     let weeklyOTPay = 0;
     let regularPayFinal = regularPayAcc;
 
@@ -89,8 +102,6 @@ export const calculateWeeklyPayroll = (entries) => {
         const weeklyOTHours = totalRegularHours - 40;
         const averageRegularRate = regularPayAcc / totalRegularHours;
 
-        // The regularPayAcc already paid for these hours at 1.0x. We need to add the 0.5x premium.
-        // Or we can recalculate: 40 hours at avg rate + OT hours at 1.5x avg rate
         regularPayFinal = 40 * averageRegularRate;
         weeklyOTPay = weeklyOTHours * (averageRegularRate * 1.5);
     }

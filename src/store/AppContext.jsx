@@ -27,7 +27,11 @@ export const AppProvider = ({ children }) => {
 
     // Employee CRUD
     const addEmployee = (employee) => {
-        const newEmployee = { ...employee, id: Date.now().toString(), createdAt: new Date().toISOString() };
+        const newEmployee = {
+            ...employee,
+            id: employee.id || Date.now().toString(),
+            createdAt: new Date().toISOString()
+        };
         setEmployees([...employees, newEmployee]);
     };
 
@@ -66,6 +70,18 @@ export const AppProvider = ({ children }) => {
         setTimeEntries(timeEntries.filter(entry => entry.id !== id));
     };
 
+    const importTimeEntries = (data) => {
+        if (Array.isArray(data)) {
+            setTimeEntries(prev => {
+                const newEntries = data.map(d => ({
+                    ...d,
+                    id: d.id || (Date.now() + Math.random()).toString()
+                }));
+                return [...prev, ...newEntries];
+            });
+        }
+    };
+
     return (
         <AppContext.Provider value={{
             employees,
@@ -76,7 +92,8 @@ export const AppProvider = ({ children }) => {
             searchEmployeeByName,
             timeEntries,
             addTimeEntry,
-            deleteTimeEntry
+            deleteTimeEntry,
+            importTimeEntries
         }}>
             {children}
         </AppContext.Provider>
