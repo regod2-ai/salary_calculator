@@ -43,9 +43,10 @@ const SalaryReport = () => {
             const empEntries = entriesByEmp[emp.id] || [];
             const payroll = calculateWeeklyPayroll(empEntries, emp.hourlyRate || 20);
             const totalMiles = empEntries.reduce((sum, entry) => sum + (entry.miles || 0), 0);
+            const totalCellPhone = empEntries.reduce((sum, entry) => sum + (entry.cellPhone || 0), 0);
 
             // Only include employees with logged hours or if specifically selected
-            if (payroll.totalPay > 0 || totalMiles > 0 || selectedEmployeeId === emp.id) {
+            if (payroll.totalPay > 0 || totalMiles > 0 || totalCellPhone > 0 || selectedEmployeeId === emp.id) {
                 const effectiveRate = payroll.regularHours > 0
                     ? payroll.regularPay / payroll.regularHours
                     : (emp.hourlyRate || 20);
@@ -54,7 +55,8 @@ const SalaryReport = () => {
                     employee: emp,
                     ...payroll,
                     effectiveRate,
-                    totalMiles
+                    totalMiles,
+                    totalCellPhone
                 });
             }
         });
@@ -65,7 +67,7 @@ const SalaryReport = () => {
     const handleExportCSV = () => {
         if (reportData.length === 0) return;
 
-        const headers = ['Employee ID', 'Name', 'Pay Rate', 'Regular Hours', 'Regular Pay', 'Daily OT Pay', 'Weekly OT Pay', 'Total Pay', 'Miles Traveled'];
+        const headers = ['Employee ID', 'Name', 'Pay Rate', 'Regular Hours', 'Regular Pay', 'Daily OT Pay', 'Weekly OT Pay', 'Total Pay', 'Miles Traveled', 'Cell Phone'];
         const rows = reportData.map(r => [
             r.employee.id,
             r.employee.name,
@@ -75,7 +77,8 @@ const SalaryReport = () => {
             r.dailyOTPay.toFixed(2),
             r.weeklyOTPay.toFixed(2),
             r.totalPay.toFixed(2),
-            (r.totalMiles || 0).toFixed(1)
+            (r.totalMiles || 0).toFixed(1),
+            (r.totalCellPhone || 0).toFixed(2)
         ]);
 
         const csvContent = [
@@ -102,7 +105,8 @@ const SalaryReport = () => {
             'Daily OT Pay ($)': r.dailyOTPay,
             'Weekly OT Pay ($)': r.weeklyOTPay,
             'Total Pay ($)': r.totalPay,
-            'Travel Miles': r.totalMiles || 0
+            'Travel Miles': r.totalMiles || 0,
+            'Cell Phone ($)': r.totalCellPhone || 0
         }));
 
         const worksheet = XLSX.utils.json_to_sheet(worksheetData);
@@ -174,6 +178,7 @@ const SalaryReport = () => {
                                 <th>Daily OT ($)</th>
                                 <th>Weekly OT ($)</th>
                                 <th>Miles</th>
+                                <th>Cell ($)</th>
                                 <th className="text-right">Total Pay ($)</th>
                             </tr>
                         </thead>
@@ -187,6 +192,7 @@ const SalaryReport = () => {
                                     <td className="text-muted">${row.dailyOTPay.toFixed(2)}</td>
                                     <td className="text-muted">${row.weeklyOTPay.toFixed(2)}</td>
                                     <td className="text-muted">{row.totalMiles?.toFixed(1) || '0.0'}</td>
+                                    <td className="text-muted">${row.totalCellPhone?.toFixed(2) || '0.00'}</td>
                                     <td className="text-right font-medium text-primary">${row.totalPay.toFixed(2)}</td>
                                 </tr>
                             )) : (
@@ -203,6 +209,7 @@ const SalaryReport = () => {
                                     <td>${reportData.reduce((sum, r) => sum + r.dailyOTPay, 0).toFixed(2)}</td>
                                     <td>${reportData.reduce((sum, r) => sum + r.weeklyOTPay, 0).toFixed(2)}</td>
                                     <td>{reportData.reduce((sum, r) => sum + (r.totalMiles || 0), 0).toFixed(1)}</td>
+                                    <td>${reportData.reduce((sum, r) => sum + (r.totalCellPhone || 0), 0).toFixed(2)}</td>
                                     <td className="text-right text-primary">${reportData.reduce((sum, r) => sum + r.totalPay, 0).toFixed(2)}</td>
                                 </tr>
                             </tfoot>

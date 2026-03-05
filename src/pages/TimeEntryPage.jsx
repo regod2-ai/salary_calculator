@@ -13,6 +13,7 @@ const TimeEntryPage = () => {
         clients: 1,
         hours: 8,
         miles: 0,
+        cellPhone: 0,
         hourlyRate: 0
     });
 
@@ -51,7 +52,7 @@ const TimeEntryPage = () => {
         });
 
         // reset form but keep employee the same
-        setFormData(prev => ({ ...prev, clients: 1, hours: 8, miles: 0 }));
+        setFormData(prev => ({ ...prev, clients: 1, hours: 8, miles: 0, cellPhone: 0 }));
         setIsManualRate(false);
     };
 
@@ -66,6 +67,7 @@ const TimeEntryPage = () => {
                 'Clients': entry.clients,
                 'Hours': entry.hours,
                 'Miles': entry.miles || 0,
+                'Cell Phone': entry.cellPhone || 0,
                 'Rate': entry.hourlyRate || 0
             };
         });
@@ -102,6 +104,7 @@ const TimeEntryPage = () => {
                         clients: Number(item.Clients || item.clients || 1),
                         hours: Number(item.Hours || item.hours || 8),
                         miles: Number(item.Miles || item.miles || 0),
+                        cellPhone: Number(item['Cell Phone'] || item.cellPhone || 0),
                         hourlyRate: Number(item.Rate || item.rate || 0)
                     };
                 }).filter(i => i.employeeId);
@@ -220,6 +223,18 @@ const TimeEntryPage = () => {
                         </div>
 
                         <div className="form-group">
+                            <label>Cell Phone ($)</label>
+                            <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={formData.cellPhone}
+                                onChange={(e) => setFormData({ ...formData, cellPhone: e.target.value })}
+                                placeholder="0.00"
+                            />
+                        </div>
+
+                        <div className="form-group">
                             <label>Pay Rate ($)</label>
                             <input
                                 type="number"
@@ -253,6 +268,7 @@ const TimeEntryPage = () => {
                                     <th>Hours</th>
                                     <th>Rate</th>
                                     <th>Miles</th>
+                                    <th>Cell</th>
                                     <th className="text-right">Actions</th>
                                 </tr>
                             </thead>
@@ -265,6 +281,7 @@ const TimeEntryPage = () => {
                                         <td className="font-mono text-primary">{entry.hours} hrs</td>
                                         <td className="font-mono text-muted">${entry.hourlyRate?.toFixed(2) || '0.00'}</td>
                                         <td className="font-mono text-muted">{entry.miles || 0} mi</td>
+                                        <td className="font-mono text-muted">${entry.cellPhone?.toFixed(2) || '0.00'}</td>
                                         <td className="text-right actions-cell">
                                             <button className="icon-btn delete-btn" onClick={() => deleteTimeEntry(entry.id)} title="Delete">
                                                 <Trash2 size={16} />
