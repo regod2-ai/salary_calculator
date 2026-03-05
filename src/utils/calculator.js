@@ -14,6 +14,8 @@ export const getHourlyRate = (mode, clients, baseRate = 20) => {
         if (clients <= 6) return baseRate + 1;
         // > 6 clients
         return baseRate + 1 + (clients - 6) * 0.25;
+    } else if (mode === 'sick') {
+        return 20;
     }
     return 0;
 };
@@ -51,8 +53,8 @@ export const calculateWeeklyPayroll = (entries, baseRate = 20) => {
 
             let effectiveHours = entry.hours;
 
-            // Apply Daily Cap (except DD)
-            if (mode !== 'DD') {
+            // Apply Daily Cap (except DD and sick)
+            if (mode !== 'DD' && mode !== 'sick') {
                 const availableInDay = Math.max(0, dailyLimit - dailyHoursAcc);
                 effectiveHours = Math.min(effectiveHours, availableInDay);
             }
@@ -64,7 +66,7 @@ export const calculateWeeklyPayroll = (entries, baseRate = 20) => {
 
             weeklyHoursRemaining -= effectiveHours;
 
-            if (mode === 'DD') {
+            if (mode === 'DD' || mode === 'sick') {
                 // Mode 1: No daily OT
                 totalRegularHours += effectiveHours;
                 regularPayAcc += effectiveHours * rate;

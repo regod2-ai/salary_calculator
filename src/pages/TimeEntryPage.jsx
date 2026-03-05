@@ -184,6 +184,7 @@ const TimeEntryPage = () => {
                                 <option value="CARI/FFH">CARI / FFH</option>
                                 <option value="AAA">AAA</option>
                                 <option value="KSSP">KSSP</option>
+                                <option value="sick">Sick</option>
                             </select>
                         </div>
 
