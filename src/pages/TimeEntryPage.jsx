@@ -203,8 +203,8 @@ const TimeEntryPage = () => {
                             <label>Hours Worked</label>
                             <input
                                 type="number"
-                                min="0.5"
-                                step="0.5"
+                                min="0"
+                                step="0.01"
                                 value={formData.hours}
                                 onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
                                 required
